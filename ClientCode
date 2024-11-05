@@ -1,0 +1,100 @@
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.*;
+
+public class ClientApp extends Frame {
+    private TextArea chatArea;
+    private TextField messageField;
+    private Button sendButton;
+    private Socket socket;
+    private PrintWriter writer;
+    private BufferedReader reader;
+    private boolean running = true;
+
+    public ClientApp(String serverAddress, int port) {
+        setTitle("Client");
+        setSize(500, 500);
+        setLayout(new BorderLayout());
+
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+        add(chatArea, BorderLayout.CENTER);
+
+        Panel bottomPanel = new Panel(new BorderLayout());
+        messageField = new TextField();
+        sendButton = new Button("Send");
+
+        sendButton.addActionListener(e -> sendMessage());
+        bottomPanel.add(messageField, BorderLayout.CENTER);
+        bottomPanel.add(sendButton, BorderLayout.EAST);
+
+        add(bottomPanel, BorderLayout.SOUTH);
+
+        addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent e) {
+                shutdownClient();
+            }
+        });
+
+        connectToServer(serverAddress, port);
+    }
+
+    private void connectToServer(String serverAddress, int port) {
+        try {
+            socket = new Socket(serverAddress, port);
+            writer = new PrintWriter(socket.getOutputStream(), true);
+            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            chatArea.append("Connected to server: " + serverAddress + ":" + port + "\n");
+
+            new Thread(this::receiveMessages).start();
+        } catch (IOException e) {
+            chatArea.append("Error connecting to server: " + e.getMessage() + "\n");
+        }
+    }
+
+    private void receiveMessages() {
+        String message;
+        try {
+            while (running && (message = reader.readLine()) != null) {
+                chatArea.append(message + "\n");
+                if ("bye".equalsIgnoreCase(message.trim())) {
+                    break;
+                }
+            }
+        } catch (IOException e) {
+            chatArea.append("Disconnected from server.\n");
+        } finally {
+            shutdownClient();
+        }
+    }
+
+    private void sendMessage() {
+        String message = messageField.getText().trim();
+        if (!message.isEmpty()) {
+            writer.println(message);
+            // chatArea.append("You: " + message + "\n");
+            if ("bye".equalsIgnoreCase(message)) {
+                shutdownClient();
+            }
+            messageField.setText("");
+        }
+    }
+
+    private void shutdownClient() {
+        running = false;
+        try {
+            if (socket != null) {
+                socket.close();
+            }
+        } catch (IOException e) {
+            chatArea.append("Error closing connection: " + e.getMessage() + "\n");
+        }
+        dispose();
+    }
+
+    public static void main(String[] args) {
+        new ClientApp("192.168.209.143", 5090).setVisible(true);
+    }
+}
+
